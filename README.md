@@ -95,4 +95,4 @@ $ coreserver forward list example.com --json
 
 ## License
 
-MIT OR Apache-2.0
+[MIT](LICENSE-MIT) または [Apache-2.0](LICENSE-APACHE)
