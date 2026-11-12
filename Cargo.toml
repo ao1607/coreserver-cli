@@ -1,0 +1,22 @@
+[package]
+name = "coreserver-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI for CORESERVER V2 (DirectAdmin API over SSH)"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "coreserver"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
+rpassword = "7"
+getrandom = "0.2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"
+codegen-units = 1
