@@ -4,6 +4,11 @@ version = "0.1.1"
 edition = "2021"
 description = "CLI for CORESERVER V2 (DirectAdmin API over SSH)"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/ao1607/coreserver-cli"
+readme = "README.md"
+keywords = ["coreserver", "directadmin", "hosting", "cli"]
+categories = ["command-line-utilities"]
+exclude = [".github"]
 
 [[bin]]
 name = "coreserver"
