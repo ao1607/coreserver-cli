@@ -18,6 +18,9 @@ const USAGE: &str = "coreserver - CORESERVER V2 CLI (DirectAdmin API over SSH)
   coreserver subdomain list <domain> | add <domain> <sub> | del <domain> <sub>
   coreserver get|post <CMD_API_...> [key=value ...]   任意の DirectAdmin API
 
+  --json   どのコマンドでも API の応答を JSON のまま1行で出す（スクリプト・AI エージェント向け）
+
+終了コード: 0=成功 / 1=失敗（理由は標準エラー）。対話入力があるのは login と mail add だけ。
 設定ファイル: ~/.coreserver（環境変数 CORESERVER_CONFIG で別ファイル＝別アカウント）";
 
 struct Cfg {
@@ -156,8 +159,16 @@ fn login(dest: &str, rest: &[&str]) -> R<()> {
 }
 
 fn run(a: &[&str]) -> R<()> {
-    if let ["login", dest, rest @ ..] = a {
-        return login(dest, rest);
+    let json = a.contains(&"--json");
+    let a: Vec<&str> = a.iter().copied().filter(|x| *x != "--json").collect();
+    let a = a.as_slice();
+    match a {
+        ["login", dest, rest @ ..] => return login(dest, rest),
+        ["help" | "--help" | "-h"] => {
+            println!("{USAGE}");
+            return Ok(());
+        }
+        _ => {}
     }
     let pw;
     let kv: Vec<(&str, &str)>;
@@ -209,6 +220,7 @@ fn run(a: &[&str]) -> R<()> {
     let v = call(&c.ssh, &c.url, &format!("{}:{}", c.user, c.key), cmd, post, params)?;
     // catchall get は選択肢の一覧まで返すので、現在値だけ出す
     match (a, v.get("value").and_then(Value::as_str)) {
+        _ if json => println!("{v}"),
         (["catchall", "get", _], Some(s)) => println!("{s}"),
         _ => show(&v),
     }
