@@ -206,7 +206,12 @@ fn run(a: &[&str]) -> R<()> {
         _ => return Err(USAGE.into()),
     };
     let c = load()?;
-    show(&call(&c.ssh, &c.url, &format!("{}:{}", c.user, c.key), cmd, post, params)?);
+    let v = call(&c.ssh, &c.url, &format!("{}:{}", c.user, c.key), cmd, post, params)?;
+    // catchall get は選択肢の一覧まで返すので、現在値だけ出す
+    match (a, v.get("value").and_then(Value::as_str)) {
+        (["catchall", "get", _], Some(s)) => println!("{s}"),
+        _ => show(&v),
+    }
     Ok(())
 }
 
