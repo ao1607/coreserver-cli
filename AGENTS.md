@@ -37,6 +37,7 @@ coreserver get <CMD_API_...> [key=value ...]
 | `subdomain add <domain> <sub>` | Creates the subdomain and `~/domains/<sub>.<domain>/`. | `subdomain del` |
 | `subdomain del <domain> <sub>` | Removes the subdomain. The folder is kept. | `subdomain add` |
 | `mail del <addr>` | **Deletes the mailbox and all its mail. Cannot be undone.** | none |
+| `logout` | Deletes the login key on the server and the local config. The user must `login` again. | none |
 | `post <CMD_API_...> ...` | Anything the account can do, including deletion. | depends |
 
 ## Raw API

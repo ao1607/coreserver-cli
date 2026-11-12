@@ -20,7 +20,11 @@ CORESERVER V2 は DirectAdmin 上で動作しているため、このツール�
 
 ## インストール
 
-このリポジトリをクローンし、以下のコマンドを実行してください。
+[Releases](https://github.com/ao1607/coreserver-cli/releases) からお使いの OS 用のファイルをダウンロードして展開し、`coreserver` を PATH の通ったフォルダに置いてください。
+
+各リリースには `SHA256SUMS` ファイルが付属しています。また、`gh attestation verify <file> --repo ao1607/coreserver-cli` を実行することで、このリポジトリからファイルがビルドされたことを確認できます。
+
+代わりにソースからビルドする場合は、このリポジトリをクローンして以下のコマンドを実行してください。
 
 ```bash
 cargo install --path .
@@ -87,6 +91,7 @@ $ coreserver forward list example.com --json
 
 - ログインキーとパスワードは標準入力経由で `curl` に渡されるため、共用サーバーのプロセス一覧には表示されません。
 - ログインキーは、アカウントでできるすべての操作が可能です。`~/.coreserver` を他人に読まれないようにしてください。
+- ログインキーが漏洩した可能性がある場合や、本ツールの使用を停止する際は、`coreserver logout` を実行してください。サーバー上のログインキーを削除し、`~/.coreserver` も削除します。
 - これは非公式のツールです。CORESERVER を運営する GMO デジロック社とは一切関係ありません。
 
 ## 動作確認

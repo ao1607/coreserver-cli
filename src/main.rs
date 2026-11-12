@@ -11,6 +11,7 @@ type R<T> = Result<T, String>;
 const USAGE: &str = "coreserver - CORESERVER V2 CLI (DirectAdmin API over SSH)
 
   coreserver login <ssh接続先> [ユーザー名] [https://ホスト:2222]
+  coreserver logout        ログインキーをサーバーから消し、設定ファイルも消す
   coreserver domains | usage | db list | cron list
   coreserver mail list <domain> | add <addr> [容量MB] | del <addr>
   coreserver forward list <domain> | add <addr> <転送先[,転送先]> | del <addr>
@@ -28,6 +29,7 @@ struct Cfg {
     user: String,
     url: String,
     key: String,
+    name: String, // ログインキーの名前（logout で消すため）
 }
 
 fn cfg_path() -> PathBuf {
@@ -48,14 +50,15 @@ fn load() -> R<Cfg> {
             .map(str::to_string)
             .ok_or(format!("{} に {k} がありません", p.display()))
     };
-    Ok(Cfg { ssh: get("ssh")?, user: get("user")?, url: get("url")?, key: get("key")? })
+    Ok(Cfg { ssh: get("ssh")?, user: get("user")?, url: get("url")?, key: get("key")?, name: get("name").unwrap_or_default() })
 }
 
 fn save(c: &Cfg) -> R<()> {
     let p = cfg_path();
-    let body = format!("ssh={}\nuser={}\nurl={}\nkey={}\n", c.ssh, c.user, c.url, c.key);
+    let body = format!("ssh={}\nuser={}\nurl={}\nkey={}\nname={}\n", c.ssh, c.user, c.url, c.key, c.name);
+    let _ = fs::remove_file(&p); // 既存ファイルの緩い権限を引き継がない
     let mut o = fs::OpenOptions::new();
-    o.write(true).create(true).truncate(true);
+    o.write(true).create_new(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o600);
     o.open(&p).and_then(|mut f| f.write_all(body.as_bytes())).map_err(|e| format!("{}: {e}", p.display()))
@@ -73,6 +76,13 @@ fn curl_config(url: &str, userpass: &str, cmd: &str, post: bool, params: &[(&str
     if !cmd.starts_with("CMD_") || !cmd.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
         return Err(format!("API 名が不正です: {cmd}"));
     }
+    if !url.starts_with("https://") {
+        return Err(format!("API の URL は https:// で始めてください: {url}"));
+    }
+    // curl は名前側を URL エンコードしないので、& などで別の引数を紛れ込ませない
+    if let Some((k, _)) = params.iter().find(|(k, _)| k.is_empty() || !k.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')) {
+        return Err(format!("引数名が不正です: {k}"));
+    }
     let mut c = format!("silent\nshow-error\nmax-time = 60\nurl = {}\nuser = {}\n", q(&format!("{url}/{cmd}"))?, q(userpass)?);
     if !post {
         c.push_str("get\n");
@@ -84,6 +94,10 @@ fn curl_config(url: &str, userpass: &str, cmd: &str, post: bool, params: &[(&str
 }
 
 fn ssh(dest: &str, remote: &str, stdin: &str) -> R<String> {
+    // "-oProxyCommand=..." のような接続先を ssh のオプションとして解釈させない
+    if dest.is_empty() || dest.starts_with('-') {
+        return Err(format!("ssh 接続先が不正です: {dest}"));
+    }
     // 鍵やパスワードは引数に載せず標準入力で渡す（共用サーバーの ps に出さない）
     let mut ch = Command::new("ssh")
         .args([dest, remote])
@@ -107,7 +121,8 @@ fn api_err(v: &Value) -> Option<String> {
 }
 
 fn call(ssh_dest: &str, url: &str, userpass: &str, cmd: &str, post: bool, params: &[(&str, &str)]) -> R<Value> {
-    let out = ssh(ssh_dest, "curl -K -", &curl_config(url, userpass, cmd, post, params)?)?;
+    // -q: サーバー側の ~/.curlrc を読ませない
+    let out = ssh(ssh_dest, "curl -q -K -",&curl_config(url, userpass, cmd, post, params)?)?;
     let v: Value = serde_json::from_str(&out)
         .map_err(|_| format!("JSON でない応答: {}", out.chars().take(300).collect::<String>()))?;
     match api_err(&v) {
@@ -151,10 +166,22 @@ fn login(dest: &str, rest: &[&str]) -> R<()> {
         ("action", "create"), ("type", "key"), ("keyname", &name), ("key", &key), ("key2", &key),
         ("never_expires", "yes"), ("max_uses", "0"), ("clear_key", "yes"), ("allow_htm", "yes"), ("passwd", &pw),
     ])?;
-    let c = Cfg { ssh: dest.into(), user, url, key };
+    let c = Cfg { ssh: dest.into(), user, url, key, name };
     save(&c)?;
     call(&c.ssh, &c.url, &format!("{}:{}", c.user, c.key), "CMD_API_SHOW_DOMAINS", false, &[])?;
-    eprintln!("ログインキー {name} を作成し {} に保存しました", cfg_path().display());
+    eprintln!("ログインキー {} を作成し {} に保存しました", c.name, cfg_path().display());
+    Ok(())
+}
+
+fn logout() -> R<()> {
+    let c = load()?;
+    if c.name.is_empty() {
+        return Err("設定ファイルにキー名 (name=) がありません。coreserver get CMD_API_LOGIN_KEYS で名前を調べて追記してください".into());
+    }
+    call(&c.ssh, &c.url, &format!("{}:{}", c.user, c.key), "CMD_API_LOGIN_KEYS", true,
+        &[("action", "select"), ("delete", "Delete"), ("select0", &c.name)])?;
+    fs::remove_file(cfg_path()).map_err(|e| e.to_string())?;
+    eprintln!("ログインキー {} をサーバーから削除し、設定ファイルを消しました", c.name);
     Ok(())
 }
 
@@ -164,6 +191,7 @@ fn run(a: &[&str]) -> R<()> {
     let a = a.as_slice();
     match a {
         ["login", dest, rest @ ..] => return login(dest, rest),
+        ["logout"] => return logout(),
         ["help" | "--help" | "-h"] => {
             println!("{USAGE}");
             return Ok(());
@@ -244,8 +272,11 @@ mod tests {
         let c = curl_config("https://h:2222", "u:p\"\\x", "CMD_API_POP", false, &[("a", "b c")]).unwrap();
         assert!(c.contains("user = \"u:p\\\"\\\\x\"\n"));
         assert!(c.contains("get\n") && c.contains("data-urlencode = \"a=b c\"\n") && c.contains("\"json=yes\""));
-        assert!(curl_config("u", "x", "CMD_X", true, &[("a", "b\nurl = evil")]).is_err());
-        assert!(curl_config("u", "x", "../etc", true, &[]).is_err());
+        assert!(curl_config("https://h", "x", "CMD_X", true, &[("a", "b\nurl = evil")]).is_err());
+        assert!(curl_config("https://h", "x", "../etc", true, &[]).is_err());
+        assert!(curl_config("http://h", "x", "CMD_X", true, &[]).is_err());
+        assert!(curl_config("https://h", "x", "CMD_X", true, &[("a&b", "c")]).is_err());
+        assert!(ssh("-oProxyCommand=calc", "true", "").is_err());
     }
 
     #[test]
