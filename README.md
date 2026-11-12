@@ -24,10 +24,10 @@ CORESERVER V2 は DirectAdmin 上で動作しているため、このツール�
 
 各リリースには `SHA256SUMS` ファイルが付属しています。また、`gh attestation verify <file> --repo ao1607/coreserver-cli` を実行することで、このリポジトリからファイルがビルドされたことを確認できます。
 
-代わりにソースからビルドする場合は、このリポジトリをクローンして以下のコマンドを実行してください。
+Rust をお使いの場合は、以下のコマンドでもインストールできます。
 
 ```bash
-cargo install --path .
+cargo install coreserver-cli
 ```
 
 ## ログイン
